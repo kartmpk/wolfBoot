@@ -147,8 +147,12 @@ void RAMFUNCTION wolfBoot_start(void)
     #endif
 
     #ifdef WOLFBOOT_USE_RAMBOOT
+        #ifndef WOLFBOOT_NO_LOAD_ADDRESS
         load_address = (uint32_t*)(WOLFBOOT_LOAD_ADDRESS -
             IMAGE_HEADER_SIZE);
+        #else
+        load_address = source_address;
+        #endif
       #if defined(EXT_ENCRYPTED) && defined(MMU)
         ret = wolfBoot_ram_decrypt((uint8_t*)source_address,
             (uint8_t*)load_address);

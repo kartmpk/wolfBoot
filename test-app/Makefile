@@ -24,6 +24,15 @@ endif
 ifeq ($(SIGN),RSA4096)
   IMAGE_HEADER_SIZE:=1024
 endif
+
+ifeq ($(SIGN),ML_DSA)
+  ML_DSA_LEVEL?=2
+  IMAGE_SIGNATURE_SIZE?=2420
+  IMAGE_HEADER_SIZE?=4840
+  CFLAGS+=-D"ML_DSA_LEVEL=$(ML_DSA_LEVEL)"
+  CFLAGS+=-D"IMAGE_SIGNATURE_SIZE=$(IMAGE_SIGNATURE_SIZE)"
+  CFLAGS+=-D"IMAGE_HEADER_SIZE=$(IMAGE_HEADER_SIZE)"
+endif
 ifeq ($(HASH),SHA256)
   WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha256.o
   CFLAGS+=-D"WOLFBOOT_HASH_SHA256"
@@ -67,6 +76,25 @@ include ../arch.mk
 
 # Setup default linker flags
 LDFLAGS+=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=image.map
+
+# x86_64_efi target configuration
+ifeq ($(TARGET),x86_64_efi)
+    # EFI application configuration
+    LSCRIPT_TEMPLATE=x86_64_efi.ld
+    APP_OBJS=app_x86_64_efi.o
+    CFLAGS+=-fpic -ffreestanding -fno-stack-protector -fno-stack-check \
+             -fshort-wchar -mno-red-zone -maccumulate-outgoing-args
+    CFLAGS+=-I/usr/include/efi -I/usr/include/efi/x86_64 \
+             -DTARGET_X86_64_EFI
+    # Use the same EFI configuration as main build
+    GNU_EFI_LIB_PATH?=/usr/lib
+    GNU_EFI_CRT0=$(GNU_EFI_LIB_PATH)/crt0-efi-x86_64.o
+    GNU_EFI_LSCRIPT=$(GNU_EFI_LIB_PATH)/elf_x86_64_efi.lds
+    LDFLAGS:=-shared -Bsymbolic -L/usr/lib -T$(GNU_EFI_LSCRIPT)
+    LD_START_GROUP=$(GNU_EFI_CRT0)
+    LD_END_GROUP=-lgnuefi -lefi
+    LD=ld
+endif
 
 # Setup default objcopy flags
 OBJCOPY_FLAGS+=--gap-fill $(FILL_BYTE)
@@ -317,6 +345,8 @@ ifeq ($(TARGET),mcxw)
     APP_OBJS+=$(MCUXPRESSO)/drivers/gpio/fsl_gpio.o
     APP_OBJS+=$(MCUXPRESSO)/drivers/spc/fsl_spc.o
     APP_OBJS+=$(MCUXPRESSO_DRIVERS)/project_template/clock_config.o
+
+
     APP_OBJS+=$(MCUXPRESSO)/drivers/ccm32k/fsl_ccm32k.o
     APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_romapi.o
 endif
@@ -506,7 +536,11 @@ else
 # Default behavior when ELF_FLASH_SCATTER is not set
 image.elf: $(APP_OBJS) $(LSCRIPT)
 	@echo "\t[LD] $@"
+ifeq ($(TARGET),x86_64_efi)
+	$(Q)$(LD) $(LDFLAGS) $(LD_START_GROUP) $(APP_OBJS) $(LD_END_GROUP) $(OUTPUT_FLAG) $@
+else
 	$(Q)$(LD) $(LDFLAGS) $(APP_OBJS) $(OUTPUT_FLAG) $@
+endif
 endif
 
 standalone: image.bin
